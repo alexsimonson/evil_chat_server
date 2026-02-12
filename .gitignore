@@ -1,0 +1,54 @@
+# -----------------------------
+# Environment / secrets
+# -----------------------------
+.env
+.env.*
+!.env.example
+
+# -----------------------------
+# Node / npm
+# -----------------------------
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# -----------------------------
+# TypeScript build output
+# -----------------------------
+dist/
+*.tsbuildinfo
+
+# -----------------------------
+# Knex / database
+# -----------------------------
+# If you generate any local sqlite/db files later
+*.sqlite
+*.sqlite3
+*.db
+
+# -----------------------------
+# Logs
+# -----------------------------
+logs/
+*.log
+
+# -----------------------------
+# Editor / OS junk
+# -----------------------------
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# -----------------------------
+# Coverage / tests
+# -----------------------------
+coverage/
+
+# -----------------------------
+# Temporary files
+# -----------------------------
+tmp/
+temp/
