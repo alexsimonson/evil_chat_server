@@ -36,9 +36,12 @@ export function makeLiveKitRouter(knex: Knex) {
       return res.status(500).json({ error: "VOICE_ROOM_NOT_CONFIGURED" });
     }
 
-    const apiKey = process.env.LIVEKIT_API_KEY ?? "devkey";
-    const apiSecret = process.env.LIVEKIT_API_SECRET ?? "secret";
-    const livekitUrl = process.env.LIVEKIT_URL ?? "ws://localhost:7880";
+    const apiKey = process.env.VITE_LIVEKIT_API_KEY ?? "devkey";
+    const apiSecret = process.env.VITE_LIVEKIT_API_SECRET ?? "secret";
+    // Prefer explicit env var; otherwise derive a host-based default so LAN devices
+    // can connect to the LiveKit server running on the same machine.
+    const reqHost = (req.headers.host || req.hostname || "localhost").split(":")[0];
+    const livekitUrl = process.env.VITE_LIVEKIT_URL ?? `ws://${reqHost}:7880`;
 
     const at = new AccessToken(apiKey, apiSecret, {
       identity: userId, // can also use username if you want
@@ -53,7 +56,28 @@ export function makeLiveKitRouter(knex: Knex) {
 
     const token = await at.toJwt();
 
-    return res.json({ token, url: livekitUrl, room: channel.livekitRoomName });
+    // Build ICE servers list: prefer explicit env var JSON, otherwise use TURN env vars,
+    // and always include a public STUN as fallback.
+    let iceServers: any[] = [{ urls: "stun:stun.l.google.com:19302" }];
+
+    if (process.env.VITE_LIVEKIT_ICE_SERVERS) {
+      try {
+        const parsed = JSON.parse(process.env.VITE_LIVEKIT_ICE_SERVERS);
+        if (Array.isArray(parsed)) iceServers = parsed;
+      } catch (e) {
+        console.warn("VITE_LIVEKIT_ICE_SERVERS parse error", e);
+      }
+    } else if (process.env.LIVEKIT_TURN_URL) {
+      const turnUrl = process.env.LIVEKIT_TURN_URL; // e.g. turn:turn.example.com:3478
+      const username = process.env.LIVEKIT_TURN_USER;
+      const credential = process.env.LIVEKIT_TURN_PASS;
+      const turnEntry: any = { urls: turnUrl };
+      if (username) turnEntry.username = username;
+      if (credential) turnEntry.credential = credential;
+      iceServers = [turnEntry, ...iceServers];
+    }
+
+    return res.json({ token, url: livekitUrl, room: channel.livekitRoomName, iceServers });
   });
 
   return router;
