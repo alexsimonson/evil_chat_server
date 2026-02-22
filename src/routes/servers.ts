@@ -1,6 +1,7 @@
 import { Router } from "express";
 import type { Knex } from "knex";
 import { requireAuth, makeRequireServerMember } from "../middleware/auth";
+import { getOnlineUsersForServer } from "../websocket/socketHandlers";
 
 export function makeServersRouter(knex: Knex) {
   const router = Router();
@@ -42,6 +43,32 @@ export function makeServersRouter(knex: Knex) {
       .orderBy([{ column: "sort_order", order: "asc" }, { column: "id", order: "asc" }]);
 
     return res.json({ channels });
+  });
+
+  // GET /servers/:serverId/members
+  router.get("/:serverId/members", requireAuth, requireServerMember, async (req, res) => {
+    const serverId = Number(req.params.serverId);
+
+    const members = await knex("server_memberships")
+      .join("users", "users.id", "server_memberships.user_id")
+      .select(
+        "users.id",
+        "users.username",
+        "users.display_name as displayName"
+      )
+      .where("server_memberships.server_id", serverId)
+      .orderBy("users.username", "asc");
+
+    const onlineIds = new Set(await getOnlineUsersForServer(serverId));
+
+    return res.json({
+      members: members.map((m: any) => ({
+        id: String(m.id),
+        username: m.username,
+        displayName: m.displayName ?? null,
+        online: onlineIds.has(String(m.id)),
+      })),
+    });
   });
 
   return router;
