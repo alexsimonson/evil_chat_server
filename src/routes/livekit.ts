@@ -41,7 +41,7 @@ export function makeLiveKitRouter(knex: Knex) {
     // Prefer explicit env var; otherwise derive a host-based default so LAN devices
     // can connect to the LiveKit server running on the same machine.
     const reqHost = (req.headers.host || req.hostname || "localhost").split(":")[0];
-    const livekitUrl = process.env.VITE_LIVEKIT_URL ?? `ws://${reqHost}:7880`;
+    const livekitUrl = process.env.VITE_LIVEKIT_URL ?? `wss://${reqHost}:8443`;
 
     const at = new AccessToken(apiKey, apiSecret, {
       identity: userId, // can also use username if you want
