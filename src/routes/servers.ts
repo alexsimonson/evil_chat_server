@@ -71,5 +71,58 @@ export function makeServersRouter(knex: Knex) {
     });
   });
 
+  // POST /servers/:serverId/channels - Create a new channel
+  router.post("/:serverId/channels", requireAuth, requireServerMember, async (req, res) => {
+    const serverId = Number(req.params.serverId);
+    const { name, type } = req.body ?? {};
+
+    if (!Number.isFinite(serverId)) {
+      return res.status(400).json({ error: "BAD_REQUEST" });
+    }
+
+    if (typeof name !== "string" || name.trim().length === 0) {
+      return res.status(400).json({ error: "Channel name is required" });
+    }
+
+    if (!["text", "voice"].includes(type)) {
+      return res.status(400).json({ error: "Channel type must be 'text' or 'voice'" });
+    }
+
+    const trimmedName = name.trim();
+
+    try {
+      const [channel] = await knex("channels")
+        .insert({
+          server_id: serverId,
+          name: trimmedName,
+          type,
+        })
+        .returning([
+          "id",
+          "server_id as serverId",
+          "name",
+          "type",
+          "sort_order as sortOrder",
+          "livekit_room_name as livekitRoomName",
+          "created_at as createdAt",
+        ]);
+
+      return res.json({
+        channel: {
+          id: channel.id,
+          serverId: channel.serverId,
+          name: channel.name,
+          type: channel.type,
+          sortOrder: channel.sortOrder,
+          livekitRoomName: channel.livekitRoomName,
+          createdAt: channel.createdAt,
+        },
+      });
+    } catch (error) {
+      console.error("Failed to create channel:", error);
+      return res.status(500).json({ error: "Failed to create channel" });
+    }
+  });
+
   return router;
 }
