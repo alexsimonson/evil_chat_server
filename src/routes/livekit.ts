@@ -80,5 +80,64 @@ export function makeLiveKitRouter(knex: Knex) {
     return res.json({ token, url: livekitUrl, room: channel.livekitRoomName, iceServers });
   });
 
+  // POST /livekit/session/start - Record when a user joins a voice channel
+  router.post("/session/start", requireAuth, async (req, res) => {
+    const userId = req.session.userId!;
+    const { channelId } = req.body ?? {};
+
+    const cid = Number(channelId);
+    if (!Number.isFinite(cid)) {
+      return res.status(400).json({ error: "BAD_REQUEST" });
+    }
+
+    // Verify user is a member of the server that owns the channel
+    const channel = await knex("channels")
+      .join("server_memberships", "server_memberships.server_id", "channels.server_id")
+      .select("channels.id", "channels.type")
+      .where("channels.id", cid)
+      .andWhere("channels.type", "voice")
+      .andWhere("server_memberships.user_id", userId)
+      .first();
+
+    if (!channel) {
+      return res.status(403).json({ error: "FORBIDDEN" });
+    }
+
+    // Create a voice session record
+    const [session] = await knex("voice_sessions")
+      .insert({
+        channel_id: cid,
+        user_id: userId,
+        joined_at: new Date(),
+      })
+      .returning(["id"]);
+
+    return res.json({ sessionId: session.id });
+  });
+
+  // POST /livekit/session/end - Record when a user leaves a voice channel
+  router.post("/session/end", requireAuth, async (req, res) => {
+    const userId = req.session.userId!;
+    const { channelId } = req.body ?? {};
+
+    const cid = Number(channelId);
+    if (!Number.isFinite(cid)) {
+      return res.status(400).json({ error: "BAD_REQUEST" });
+    }
+
+    // Update the most recent voice session for this user/channel without a left_at time
+    const result = await knex("voice_sessions")
+      .where("user_id", userId)
+      .andWhere("channel_id", cid)
+      .whereNull("left_at")
+      .update({ left_at: new Date() });
+
+    if (result === 0) {
+      return res.status(404).json({ error: "SESSION_NOT_FOUND" });
+    }
+
+    return res.json({ success: true });
+  });
+
   return router;
 }

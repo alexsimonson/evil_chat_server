@@ -84,6 +84,61 @@ export function makeChannelsRouter(knex: Knex) {
     return res.json({ messageId: row.id });
   });
 
+  // GET /channels/voice/participants/:serverId - Get voice channels and their participants for a server
+  router.get("/voice/participants/:serverId", requireAuth, async (req, res) => {
+    const serverId = Number(req.params.serverId);
+    const userId = req.session.userId!;
+
+    if (!Number.isFinite(serverId)) {
+      return res.status(400).json({ error: "BAD_REQUEST" });
+    }
+
+    // Verify user is a member of the server
+    const membership = await knex("server_memberships")
+      .where("server_id", serverId)
+      .andWhere("user_id", userId)
+      .first();
+
+    if (!membership) {
+      return res.status(403).json({ error: "FORBIDDEN" });
+    }
+
+    // Get all voice channels for the server with their current participants
+    const channels = await knex("channels")
+      .select("id", "name", "livekit_room_name as livekitRoomName")
+      .where("server_id", serverId)
+      .andWhere("type", "voice")
+      .orderBy("sort_order", "asc")
+      .orderBy("id", "asc");
+
+    // For each voice channel, get active participants (where left_at is NULL)
+    const channelData = await Promise.all(
+      channels.map(async (channel) => {
+        const participants = await knex("voice_sessions")
+          .join("users", "users.id", "voice_sessions.user_id")
+          .select(
+            "users.id as userId",
+            "users.username",
+            "users.display_name as displayName"
+          )
+          .where("voice_sessions.channel_id", channel.id)
+          .whereNull("voice_sessions.left_at");
+
+        return {
+          id: channel.id,
+          name: channel.name,
+          livekitRoomName: channel.livekitRoomName,
+          participants: participants.map((p: any) => ({
+            id: p.userId,
+            username: p.username,
+            displayName: p.displayName ?? null,
+          })),
+        };
+      })
+    );
+
+    return res.json({ channels: channelData });
+  });
 
   return router;
 }
