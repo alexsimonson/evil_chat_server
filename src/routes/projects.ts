@@ -49,9 +49,6 @@ export function makeProjectsRouter(knex: Knex) {
             trackOrder: [],
             transport: {
               bpm: 120,
-              isPlaying: false,
-              isRecording: false,
-              positionSeconds: 0,
             },
           };
 
@@ -167,8 +164,6 @@ export function makeProjectsRouter(knex: Knex) {
           trackOrder: [],
           transport: {
             bpm: 120,
-            isPlaying: false,
-            positionSeconds: 0,
           },
         };
 
@@ -381,8 +376,6 @@ export function makeProjectsRouter(knex: Knex) {
           trackOrder: [],
           transport: {
             bpm: 120,
-            isPlaying: false,
-            positionSeconds: 0,
           },
         };
 
