@@ -80,6 +80,58 @@ export function makeLiveKitRouter(knex: Knex) {
     return res.json({ token, url: livekitUrl, room: channel.livekitRoomName, iceServers });
   });
 
+  // POST /livekit/daw-token - Get token for shared DAW collaboration room
+  router.post("/daw-token", requireAuth, async (req, res) => {
+    const userId = req.session.userId!;
+
+    const apiKey = process.env.VITE_LIVEKIT_API_KEY ?? "devkey";
+    const apiSecret = process.env.VITE_LIVEKIT_API_SECRET ?? "secret";
+    const reqHost = (req.headers.host || req.hostname || "localhost").split(":")[0];
+    const livekitUrl = process.env.VITE_LIVEKIT_URL ?? `wss://${reqHost}:8443`;
+
+    // Get user info for display name
+    const user = await knex("users")
+      .select("username")
+      .where("id", userId)
+      .first();
+
+    const at = new AccessToken(apiKey, apiSecret, {
+      identity: userId,
+      name: user?.username || userId,
+    });
+
+    at.addGrant({
+      roomJoin: true,
+      room: "shared-daw", // Shared DAW room for all users
+      canPublish: true,
+      canSubscribe: true,
+    });
+
+    const token = await at.toJwt();
+
+    // Build ICE servers list
+    let iceServers: any[] = [{ urls: "stun:stun.l.google.com:19302" }];
+
+    if (process.env.VITE_LIVEKIT_ICE_SERVERS) {
+      try {
+        const parsed = JSON.parse(process.env.VITE_LIVEKIT_ICE_SERVERS);
+        if (Array.isArray(parsed)) iceServers = parsed;
+      } catch (e) {
+        console.warn("VITE_LIVEKIT_ICE_SERVERS parse error", e);
+      }
+    } else if (process.env.LIVEKIT_TURN_URL) {
+      const turnUrl = process.env.LIVEKIT_TURN_URL;
+      const username = process.env.LIVEKIT_TURN_USER;
+      const credential = process.env.LIVEKIT_TURN_PASS;
+      const turnEntry: any = { urls: turnUrl };
+      if (username) turnEntry.username = username;
+      if (credential) turnEntry.credential = credential;
+      iceServers = [turnEntry, ...iceServers];
+    }
+
+    return res.json({ token, url: livekitUrl, room: "shared-daw", iceServers });
+  });
+
   // POST /livekit/session/start - Record when a user joins a voice channel
   router.post("/session/start", requireAuth, async (req, res) => {
     const userId = req.session.userId!;

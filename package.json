@@ -8,7 +8,8 @@
     "knex": "^3.1.0",
     "livekit-server-sdk": "^2.15.0",
     "pg": "^8.17.2",
-    "socket.io": "^4.8.3"
+    "socket.io": "^4.8.3",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@types/cors": "^2.8.19",

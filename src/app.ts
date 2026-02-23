@@ -7,6 +7,7 @@ import { makeAuthRouter } from "./routes/auth";
 import { makeServersRouter } from "./routes/servers";
 import { makeChannelsRouter } from "./routes/channels";
 import { makeLiveKitRouter } from "./routes/livekit";
+import { makeProjectsRouter } from "./routes/projects";
 
 import cors from "cors";
 // CORS configuration similar to abc_site (allows localhost and local network during development)
@@ -98,6 +99,7 @@ export function makeApp() {
   app.use("/auth", makeAuthRouter(knex));
   app.use("/servers", makeServersRouter(knex));
   app.use("/channels", makeChannelsRouter(knex));
+  app.use("/projects", makeProjectsRouter(knex));
   app.use("/livekit", makeLiveKitRouter(knex));
 
   return app;
