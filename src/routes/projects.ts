@@ -402,6 +402,56 @@ export function makeProjectsRouter(knex: Knex) {
     }
   });
 
+  // Upload audio recording for DAW project
+  router.post('/:projectId/audio/upload', requireAuth, async (req, res) => {
+    try {
+      const projectId = Number(req.params.projectId);
+      if (!Number.isFinite(projectId)) {
+        return res.status(400).json({ error: 'INVALID_PROJECT_ID' });
+      }
+
+      const { audioData, mimeType, duration } = req.body;
+      if (!audioData || !mimeType || typeof duration !== 'number') {
+        return res.status(400).json({ error: 'INVALID_REQUEST' });
+      }
+
+      // Check if user has access to this project
+      const project = await knex('projects')
+        .select('id')
+        .where('id', projectId)
+        .first();
+
+      if (!project) {
+        return res.status(404).json({ error: 'PROJECT_NOT_FOUND' });
+      }
+
+      // Generate asset ID (same format as client-side generation for consistency)
+      const assetId = Math.random().toString(36).substring(2, 15);
+
+      // Store the audio asset with data URL
+      await knex('project_assets').insert({
+        id: assetId,
+        project_id: projectId,
+        kind: 'audio',
+        name: `Recording ${new Date().toLocaleTimeString()}`,
+        url: audioData, // Store the data URL directly
+        duration,
+        mime_type: mimeType,
+        file_size: audioData.length,
+      });
+
+      console.log(`[Audio] Stored recording as asset ${assetId} for project ${projectId}`);
+
+      return res.json({
+        assetId,
+        audioUrl: audioData, // Return the data URL
+      });
+    } catch (error) {
+      console.error('Error uploading audio:', error);
+      return res.status(500).json({ error: 'INTERNAL_ERROR' });
+    }
+  });
+
   // List user's projects
   router.get('/', requireAuth, async (req, res) => {
     try {
