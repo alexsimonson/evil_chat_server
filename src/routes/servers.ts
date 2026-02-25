@@ -60,6 +60,11 @@ export function makeServersRouter(knex: Knex) {
       .orderBy("users.username", "asc");
 
     const onlineIds = new Set(await getOnlineUsersForServer(serverId));
+    
+    console.log(`[API] Server ${serverId} members request:`, {
+      totalMembers: members.length,
+      onlineUserIds: Array.from(onlineIds),
+    });
 
     return res.json({
       members: members.map((m: any) => ({
