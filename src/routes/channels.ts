@@ -1,6 +1,11 @@
 import { Router } from "express";
 import type { Knex } from "knex";
 import { requireAuth, makeRequireChannelMember } from "../middleware/auth";
+import {
+  buildMessageAad,
+  decryptMessageContent,
+  encryptMessageContent,
+} from "../utils/messageCrypto";
 
 export function makeChannelsRouter(knex: Knex) {
   const router = Router();
@@ -25,6 +30,11 @@ export function makeChannelsRouter(knex: Knex) {
         "messages.id",
         "messages.channel_id as channelId",
         "messages.content",
+        "messages.content_ciphertext as contentCiphertext",
+        "messages.content_nonce as contentNonce",
+        "messages.content_auth_tag as contentAuthTag",
+        "messages.content_alg as contentAlg",
+        "messages.content_key_id as contentKeyId",
         "messages.created_at as createdAt",
         "messages.edited_at as editedAt",
         "users.id as userId",
@@ -39,18 +49,46 @@ export function makeChannelsRouter(knex: Knex) {
 
     const rows = await q;
 
-    const messages = rows.map((r: any) => ({
-      id: r.id,
-      channelId: r.channelId,
-      content: r.content,
-      createdAt: r.createdAt,
-      editedAt: r.editedAt ?? null,
-      user: {
-        id: r.userId,
-        username: r.username,
-        displayName: r.displayName ?? null,
-      },
-    }));
+    const messages = rows.map((r: any) => {
+      let content = r.content ?? "";
+
+      if (
+        r.contentCiphertext &&
+        r.contentNonce &&
+        r.contentAuthTag &&
+        r.contentAlg &&
+        r.contentKeyId
+      ) {
+        try {
+          content = decryptMessageContent(
+            {
+              contentCiphertext: r.contentCiphertext,
+              contentNonce: r.contentNonce,
+              contentAuthTag: r.contentAuthTag,
+              contentAlg: r.contentAlg,
+              contentKeyId: r.contentKeyId,
+            },
+            buildMessageAad(r.channelId, String(r.userId))
+          );
+        } catch (e) {
+          console.error("[channels] Failed to decrypt message", { messageId: r.id, error: e });
+          content = "[Encrypted message unavailable]";
+        }
+      }
+
+      return {
+        id: r.id,
+        channelId: r.channelId,
+        content,
+        createdAt: r.createdAt,
+        editedAt: r.editedAt ?? null,
+        user: {
+          id: r.userId,
+          username: r.username,
+          displayName: r.displayName ?? null,
+        },
+      };
+    });
 
     const nextCursor = messages.length > 0 ? messages[messages.length - 1].id : null;
 
@@ -72,12 +110,19 @@ export function makeChannelsRouter(knex: Knex) {
     }
 
     const trimmed = content.trim();
+    const aad = buildMessageAad(channelId, userId);
+    const encrypted = encryptMessageContent(trimmed, aad);
 
     const [row] = await knex("messages")
       .insert({
         channel_id: channelId,
         user_id: userId,
-        content: trimmed,
+        content: null,
+        content_ciphertext: encrypted.contentCiphertext,
+        content_nonce: encrypted.contentNonce,
+        content_auth_tag: encrypted.contentAuthTag,
+        content_alg: encrypted.contentAlg,
+        content_key_id: encrypted.contentKeyId,
       })
       .returning(["id"]);
 

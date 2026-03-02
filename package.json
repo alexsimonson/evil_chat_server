@@ -28,6 +28,7 @@
     "dev": "ts-node-dev --respawn --transpile-only src/index.ts",
     "build": "tsc",
     "start": "node dist/index.js",
+    "key:generate:v2": "node scripts/generate-message-encryption-key.js --id v2",
     "migrate": "knex migrate:latest --env development",
     "rollback": "knex migrate:rollback --env development",
     "db:reset": "knex migrate:rollback --all && knex migrate:latest && knex seed:run",

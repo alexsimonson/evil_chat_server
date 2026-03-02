@@ -1,6 +1,7 @@
 import type { Server as SocketIOServer, Socket } from "socket.io";
 import type { Knex } from "knex";
 import { knex } from "../db/knex";
+import { buildMessageAad, encryptMessageContent } from "../utils/messageCrypto";
 
 // Track connected users per server
 interface UserSession {
@@ -146,12 +147,21 @@ export function initializeSocketHandlers(io: SocketIOServer) {
           return callback({ error: "FORBIDDEN" });
         }
 
-        // Save message to database
+        const trimmed = content.trim();
+        const aad = buildMessageAad(Number(channelId), session.userId);
+        const encrypted = encryptMessageContent(trimmed, aad);
+
+        // Save message to database (ciphertext only)
         const [message] = await knex("messages")
           .insert({
             channel_id: channelId,
             user_id: session.userId,
-            content: content.trim(),
+            content: null,
+            content_ciphertext: encrypted.contentCiphertext,
+            content_nonce: encrypted.contentNonce,
+            content_auth_tag: encrypted.contentAuthTag,
+            content_alg: encrypted.contentAlg,
+            content_key_id: encrypted.contentKeyId,
           })
           .returning(["id", "created_at as createdAt"]);
 
@@ -159,7 +169,7 @@ export function initializeSocketHandlers(io: SocketIOServer) {
         io.to(`server:${session.serverId}`).emit("message:new", {
           id: message.id,
           channelId,
-          content: content.trim(),
+          content: trimmed,
           createdAt: message.createdAt,
           user: {
             id: session.userId,

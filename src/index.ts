@@ -1,10 +1,13 @@
+import "dotenv/config";
 import { createServer } from "http";
 import { Server as SocketIOServer } from "socket.io";
 import { makeApp } from "./app";
 import { initializeSocketHandlers } from "./websocket/socketHandlers";
+import { validateMessageEncryptionConfig } from "./utils/messageCrypto";
 
 /* ---------------- startup ---------------- */
 const PORT = Number(process.env.PORT ?? 3001);
+validateMessageEncryptionConfig();
 const app = makeApp();
 
 const httpServer = createServer(app);
