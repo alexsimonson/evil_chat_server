@@ -140,6 +140,10 @@ export function buildMessageAad(channelId: number, userId: string): string {
   return `channel:${channelId}:user:${userId}`;
 }
 
+export function buildDirectMessageAad(conversationId: number, userId: string): string {
+  return `dm:${conversationId}:user:${userId}`;
+}
+
 export function encryptMessageContent(content: string, aad: string): EncryptedMessagePayload {
   const keyRing = getMessageKeyRing();
   const activeKeyBytes = keyRing.keysById.get(keyRing.activeKeyId)!;

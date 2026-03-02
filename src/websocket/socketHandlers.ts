@@ -1,7 +1,11 @@
 import type { Server as SocketIOServer, Socket } from "socket.io";
 import type { Knex } from "knex";
 import { knex } from "../db/knex";
-import { buildMessageAad, encryptMessageContent } from "../utils/messageCrypto";
+import {
+  buildDirectMessageAad,
+  buildMessageAad,
+  encryptMessageContent,
+} from "../utils/messageCrypto";
 
 // Track connected users per server
 interface UserSession {
@@ -24,11 +28,11 @@ export function initializeSocketHandlers(io: SocketIOServer) {
     
     // Wrap emit on the socket to log all events
     const originalEmit = socket.emit.bind(socket);
-    socket.emit = function (...args: any[]) {
-      if (typeof args[0] === "string" && !args[0].startsWith("_")) {
-        console.log(`[Socket] ${socket.id} emitting:`, args[0]);
+    socket.emit = function (event: string, ...args: any[]) {
+      if (typeof event === "string" && !event.startsWith("_")) {
+        console.log(`[Socket] ${socket.id} emitting:`, event);
       }
-      return originalEmit(...args);
+      return originalEmit(event, ...args);
     } as any;
     
     next();
@@ -97,6 +101,7 @@ export function initializeSocketHandlers(io: SocketIOServer) {
 
         // Join the user to a server-specific room
         socket.join(`server:${serverIdNum}`);
+        socket.join(`user:${userIdStr}`);
 
         // Broadcast user joined only on first connection
         if (prevCount === 0) {
@@ -291,6 +296,77 @@ export function initializeSocketHandlers(io: SocketIOServer) {
       } catch (e) {
         console.error("[Socket] Voice leave error:", e);
         callback({ error: "VOICE_ERROR" });
+      }
+    });
+
+    // Handle new direct message
+    socket.on("dm:send", async (data: any, callback: any) => {
+      try {
+        const session = userSessions.get(socket.id);
+        if (!session) {
+          return callback({ error: "UNAUTHORIZED" });
+        }
+
+        const conversationId = Number(data?.conversationId);
+        const content = data?.content;
+
+        if (!Number.isFinite(conversationId)) {
+          return callback({ error: "BAD_REQUEST" });
+        }
+
+        if (typeof content !== "string" || content.trim().length === 0) {
+          return callback({ error: "INVALID_MESSAGE" });
+        }
+
+        const conversation = await knex("dm_conversations")
+          .select("id", "user1_id as user1Id", "user2_id as user2Id")
+          .where("id", conversationId)
+          .andWhere((qb) =>
+            qb.where("user1_id", session.userId).orWhere("user2_id", session.userId)
+          )
+          .first();
+
+        if (!conversation) {
+          return callback({ error: "FORBIDDEN" });
+        }
+
+        const trimmed = content.trim();
+        const aad = buildDirectMessageAad(conversationId, session.userId);
+        const encrypted = encryptMessageContent(trimmed, aad);
+
+        const [message] = await knex("dm_messages")
+          .insert({
+            conversation_id: conversationId,
+            user_id: session.userId,
+            content: null,
+            content_ciphertext: encrypted.contentCiphertext,
+            content_nonce: encrypted.contentNonce,
+            content_auth_tag: encrypted.contentAuthTag,
+            content_alg: encrypted.contentAlg,
+            content_key_id: encrypted.contentKeyId,
+          })
+          .returning(["id", "created_at as createdAt"]);
+
+        await knex("dm_conversations")
+          .where("id", conversationId)
+          .update({ updated_at: knex.fn.now() });
+
+        io.to(`user:${conversation.user1Id}`).to(`user:${conversation.user2Id}`).emit("dm:new", {
+          id: message.id,
+          conversationId,
+          content: trimmed,
+          createdAt: message.createdAt,
+          user: {
+            id: session.userId,
+            username: session.username,
+            displayName: session.displayName,
+          },
+        });
+
+        callback({ success: true, messageId: message.id });
+      } catch (e) {
+        console.error("[Socket] DM send error:", e);
+        callback({ error: "DM_MESSAGE_ERROR" });
       }
     });
 

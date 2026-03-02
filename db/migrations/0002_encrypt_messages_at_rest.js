@@ -43,6 +43,10 @@ exports.down = async function down(knex) {
     ALTER TABLE messages
       DROP CONSTRAINT IF EXISTS messages_content_or_ciphertext_present;
 
+    UPDATE messages
+      SET content = '[Encrypted message unavailable]'
+      WHERE content IS NULL OR length(trim(content)) = 0;
+
     ALTER TABLE messages
       DROP COLUMN IF EXISTS content_ciphertext,
       DROP COLUMN IF EXISTS content_nonce,
